@@ -69,7 +69,7 @@ class PassengerResource(Resource):
         return passenger.to_dict()
 
 class PassengerSoftDeleteResource(Resource):
-    def patch(self, passenger_id):
+    def delete(self, passenger_id):
         passenger = Passenger.query.get(passenger_id)
         if passenger is None:
             return {'message': 'Passenger not found'}, 404
