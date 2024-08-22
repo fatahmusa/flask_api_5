@@ -27,46 +27,65 @@ class FlightResource(Resource):
 class PassengerResource(Resource):
     def post(self):
         data = request.get_json()
-        flight = Flight.query.filter_by(Flight.id =='flight_id')
+
+        flight_id = data.get('flight_id')
+        flight = Flight.query.filter_by(id=flight_id).first()
+
+        if not flight:
+            return {'message': 'Flight not found'}, 404
+
         passenger = Passenger(
             name=data.get('name'), 
             email=data.get('email'), 
             flight=flight,
         )
+
         db.session.add(passenger)
         db.session.commit()
+
         return passenger.to_dict(), 201
 
     def get(self, passenger_id=None):
         if passenger_id:
-            passenger = Passenger.query.get(Passenger.id == passenger_id).first()
+            passenger = Passenger.query.get(passenger_id)
+            if not passenger:
+                return {'message': 'Passenger not found'}, 404
             return passenger.to_dict()
         else:
             passengers = Passenger.query.filter_by(deleted=False).all()
             return [passenger.to_dict() for passenger in passengers]
 
     def put(self, passenger_id):
-        passenger = Passenger.query.get(Passenger.id == passenger_id)
+        passenger = Passenger.query.get(passenger_id)
+        if not passenger:
+            return {'message': 'Passenger not found'}, 404
+
         data = request.get_json()
         passenger.name = data.get('name', passenger.name)
         passenger.email = data.get('email', passenger.email)
         passenger.checked_in = data.get('checked_in', passenger.checked_in)
+
         db.session.commit()
         return passenger.to_dict()
 
 class PassengerSoftDeleteResource(Resource):
     def patch(self, passenger_id):
-        passenger = Passenger.query.get(Passenger.id == passenger_id)
+        passenger = Passenger.query.get(passenger_id)
+        if passenger is None:
+            return {'message': 'Passenger not found'}, 404
         passenger.soft_delete()
         db.session.commit()
         return {'message': 'Passenger soft deleted'}
 
 class PassengerRestoreResource(Resource):
     def patch(self, passenger_id):
-        passenger = Passenger.query.get(Passenger.id == passenger_id)
+        passenger = Passenger.query.get(passenger_id)
+        if passenger is None:
+            return {'message': 'Passenger not found'}, 404
         passenger.restore()
         db.session.commit()
         return {'message': 'Passenger restored'}
+
 
 # Add resources to the API
 api.add_resource(FlightResource, '/flights')
