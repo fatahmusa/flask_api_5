@@ -23,6 +23,27 @@ class FlightResource(Resource):
         db.session.add(flight)
         db.session.commit()
         return {'message': 'Flight created', 'flight_id': flight.id}, 201
+    
+    def get(self, flight_id=None):
+        if flight_id:
+            flight = Flight.query.get(flight_id)
+            if not flight:
+                return {'message': 'Flight not found'}, 404
+            return flight.to_dict(), 200
+        else:
+            flights = Flight.query.all()
+            return [flight.to_dict() for flight in flights], 200
+        
+    def put(self, flight_id):
+        flight = Flight.query.get(flight_id)
+        if not flight:
+            return {'message': 'Flight not found'}, 404
+        data = request.get_json()
+        flight.flight_name = data.get('flight_name', flight.flight_name)
+        flight.destination = data.get('destination', flight.destination)
+        db.session.commit()
+        return {'message': 'Flight updated'}, 200
+    
 
 class PassengerResource(Resource):
     def post(self):
@@ -85,13 +106,16 @@ class PassengerRestoreResource(Resource):
         passenger.restore()
         db.session.commit()
         return {'message': 'Passenger restored'}
+    
+
 
 
 # Add resources to the API
-api.add_resource(FlightResource, '/flights')
+api.add_resource(FlightResource, '/flights' , '/flights/<int:flight_id>')
 api.add_resource(PassengerResource, '/passengers', '/passengers/<int:passenger_id>')
 api.add_resource(PassengerSoftDeleteResource, '/passengers/<int:passenger_id>/soft_delete')
 api.add_resource(PassengerRestoreResource, '/passengers/<int:passenger_id>/restore')
+
 
 # Run the app
 if __name__ == '__main__':

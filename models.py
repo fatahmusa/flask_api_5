@@ -9,7 +9,23 @@ class Flight(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     flight_name = db.Column(db.String(80), nullable=False)
     destination = db.Column(db.String(120), nullable=False)
+    deleted = db.Column(db.Boolean, default=False)
+
     passengers = db.relationship('Passenger', backref='flight', cascade='all, delete-orphan')
+
+    def soft_delete(self):
+        self.deleted = True
+
+    def restore(self):
+        self.deleted = False
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'flight_name': self.flight_name,
+            'destination': self.destination,
+            'passengers': [passenger.to_dict() for passenger in self.passengers]
+        }
 
     def __repr__(self):
         return f'<Flight {self.flight_name}>'
