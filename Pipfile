@@ -12,6 +12,8 @@ numpy = "*"
 flask-restful = "*"
 flask-migrate = "*"
 faker = "*"
+pytest = "*"
+flask-testing = "*"
 
 [dev-packages]
 

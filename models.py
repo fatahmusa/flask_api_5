@@ -1,9 +1,9 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, DateTime
+from sqlalchemy import String
+from sqlalchemy.sql import func
+from sqlalchemy.ext.declarative import declared_attr
 import uuid
-from functools import lru_cache
-import numpy as np
 
 db = SQLAlchemy()
 
@@ -11,127 +11,73 @@ class BaseModel(db.Model):
     __abstract__ = True
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    deleted = db.Column(db.Boolean, default=False)
+    created_at = db.Column(DateTime(timezone=True), server_default=func.now())
+    deleted_at = db.Column(DateTime(timezone=True), nullable=True)
 
     def soft_delete(self):
-        self.deleted = True
+        """Set the deleted_at timestamp to mark as soft deleted."""
+        self.deleted_at = func.now()
         db.session.commit()
 
+    @property
+    def is_deleted(self):
+        return self.deleted_at is not None
+    
     def restore(self):
-        self.deleted = False
+        """Clear the deleted_at timestamp to restore the record."""
+        self.deleted_at = None
         db.session.commit()
 
-    def to_dict(self):
-        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
-
-    def __repr__(self):
-        return f'<{self.__class__.__name__} {self.id}>'
-
-class Flight(BaseModel):
-    __tablename__ = 'flights'
-
-    flight_name = db.Column(db.String(80), nullable=False)
-    destination = db.Column(db.String(120), nullable=False)
-    cost = db.Column(db.Float, nullable=False)
-    origin = db.Column(db.String(120), nullable=False)  
-
-    passengers = db.relationship('Passenger', backref='flight', cascade='all, delete-orphan')
+    @property
+    def is_deleted(self):
+        return self.deleted_at is not None
 
     def to_dict(self):
         return {
             'id': str(self.id),
-            'flight_name': self.flight_name,
-            'origin': self.origin,  # Include origin in to_dict
-            'destination': self.destination,
-            'cost': self.cost,
-            'passengers': [passenger.to_dict() for passenger in self.passengers]
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None,
         }
 
-    def __repr__(self):
-        return f'<Flight {self.flight_name}>'
-    
 
-    @staticmethod
-    @lru_cache(maxsize=32)  # Memoize the function with a cache size of 32 entries
-    def find_minimum_cost_path(origin: str, destination: str) -> float:
-        """Returns the minimum cost to travel from origin to destination."""
-        # Retrieve all flights
-        flights = Flight.query.all()
+class Flight(BaseModel, db.Model ):
+    __tablename__ = 'flight'
 
-        # Create a dictionary to store costs
-        cost_dict = {}
-        for flight in flights:
-            if flight.flight_name not in cost_dict:
-                cost_dict[flight.flight_name] = {}
-            cost_dict[flight.flight_name][flight.destination] = flight.cost
-
-        # Create a list of all cities 
-        cities = list(set([flight.flight_name for flight in flights] + [flight.destination for flight in flights]))
-
-        # Initialize cost table
-        num_cities = len(cities)
-        INF = float('inf')
-        cost_table = np.full((num_cities, num_cities), INF)
-
-        # Create city index mapping
-        city_index = {city: i for i, city in enumerate(cities)}
-
-        # Set cost for direct flights
-        for flight in flights:
-            u = city_index[flight.flight_name]
-            v = city_index[flight.destination]
-            cost_table[u][v] = flight.cost
-
-        # Set the cost to reach the origin city as 0
-        start_index = city_index.get(origin)
-        if start_index is None:
-            raise ValueError(f"Origin city {origin} not found in the flight data.")
-        cost_table[start_index][start_index] = 0
-
-        # Perform tabulation (Bellman-Ford algorithm)
-        for _ in range(num_cities - 1):
-            for i in range(num_cities):
-                for j in range(num_cities):
-                    if cost_table[i][j] == INF:
-                        continue
-                    for k in range(num_cities):
-                        if cost_table[i][k] + cost_table[k][j] < cost_table[i][j]:
-                            cost_table[i][j] = cost_table[i][k] + cost_table[k][j]
-
-        # Retrieve the minimum cost to reach the destination city
-        end_index = city_index.get(destination)
-        if end_index is None:
-            raise ValueError(f"Destination city {destination} not found in the flight data.")
-
-        return cost_table[start_index][end_index] if cost_table[start_index][end_index] != INF else float('inf')
-    
-    @staticmethod
-    @lru_cache(maxsize=32)  # Memoize the function with a cache size of 32 entries
-    def get_passenger_count(flight_id):
-        """Returns the total number of passengers for a given flight."""
-        flight = Flight.query.get(flight_id)
-        if flight:
-            return len(flight.passengers)
-        return 0
-    
-
-
-class Passenger(BaseModel):
-    __tablename__ = 'passengers'
-
-    name = db.Column(db.String(120), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    checked_in = db.Column(db.Boolean, default=False)
-    flight_id = db.Column(db.String(36), db.ForeignKey('flights.id'), nullable=False)
+    id = Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    flight_name = db.Column(db.String(255), nullable=False)
+    origin = db.Column(db.String(255), nullable=False)
+    destination = db.Column(db.String(255), nullable=False)
+    cost = db.Column(db.Float, nullable=False)
 
     def to_dict(self):
-        return {
-            'id': str(self.id),
+        # Inherit the common fields from BaseModel and add specific fields
+        base_dict = super().to_dict()
+        base_dict.update({
+            'flight_name': self.flight_name,
+            'origin': self.origin,
+            'destination': self.destination,
+            'cost': self.cost
+        })
+        return base_dict
+
+class Passenger(BaseModel, db.Model ):
+    __tablename__ = 'passenger'
+
+    id = Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), nullable=False)
+    checked_in = db.Column(db.Boolean, default=False)
+    flight_id = db.Column(db.String(36), db.ForeignKey('flight.id'))
+    flight = db.relationship('Flight', backref=db.backref('passengers', lazy=True))
+
+    def to_dict(self):
+        # Inherit the common fields from BaseModel and add specific fields
+        base_dict = super().to_dict()
+        base_dict.update({
             'name': self.name,
             'email': self.email,
             'checked_in': self.checked_in,
-            'flight_id': str(self.flight_id)
-        }
-
-    def __repr__(self):
-        return f'<Passenger {self.name}>'
+            'flight_id': str(self.flight_id),
+        })
+        return base_dict
+    
