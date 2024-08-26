@@ -28,6 +28,18 @@ def internal_error(error):
 # Resources
 
 class FlightResource(Resource):
+    @cache.cached(timeout=120)
+    def get(self, flight_id=None):
+        if flight_id:
+            flight = Flight.query.get(str(flight_id))
+            if not flight:
+                return {'message': 'Flight not found'}, 404
+            return flight.to_dict(), 200
+        else:
+            flights = Flight.query.all()
+            return [flight.to_dict() for flight in flights], 200
+
+
     def post(self):
         data = request.get_json()
         
@@ -66,6 +78,7 @@ class FlightResource(Resource):
 
 
 class PassengerResource(Resource):
+    @cache.cached(timeout=120, query_string=True)
     def post(self):
         data = request.get_json()
         flight_id = data.get('flight_id')
@@ -110,6 +123,7 @@ class PassengerResource(Resource):
 
 
 class PassengerSoftDeleteResource(Resource):
+    
     def delete(self, passenger_id):
         passenger = Passenger.query.get(str(passenger_id))
         if not passenger:
