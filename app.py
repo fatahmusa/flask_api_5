@@ -5,6 +5,7 @@ from flask_migrate import Migrate
 from flask_caching import Cache
 from uuid import UUID
 from models import db, Flight, Passenger
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///flight.db'
@@ -45,39 +46,53 @@ class FlightResource(Resource):
 
     def post(self):
         data = request.get_json()
-        
-        flight_id = data.get('flight_id')
-        
-        if not flight_id:
-            return {'message': 'Flight ID is required'}, 400
+
+        # Retrieve all required fields from the request data
+        flight_id = data.get('id')
+        flight_name = data.get('flight_name')
+        origin = data.get('origin')
+        destination = data.get('destination')
+        cost = data.get('cost')
+        created_at = data.get('created_at')
+        deleted_at = data.get('deleted_at')
+
+        # Check if all required fields are present
+        if not flight_id or not flight_name or not origin or not destination or cost is None:
+            return {'message': 'All fields (id, flight_name, origin, destination, cost) are required.'}, 400
 
         try:
-            # Validate flight_id format
-            flight_id = str(UUID(flight_id))
+            flight_id = str(UUID(flight_id))  # Validate flight_id format
         except ValueError:
             return {'message': 'Invalid flight ID format'}, 400
 
-        # Find the flight by flight_id
-        flight = Flight.query.filter_by(id=flight_id).first()
-        if not flight:
-            return {'message': 'Flight not found'}, 404
+        try:
+            # Convert created_at and deleted_at to datetime objects if provided
+            if created_at:
+                created_at = datetime.fromisoformat(created_at)
+            if deleted_at:
+                deleted_at = datetime.fromisoformat(deleted_at)
+        except ValueError:
+            return {'message': 'Invalid datetime format. Use ISO 8601 format.'}, 400
 
-        # Create a new passenger
-        passenger = Passenger(
-            name=data.get('name'),
-            email=data.get('email'),
-            flight_id=flight_id  # Use the flight_id directly
+        # Create a new Flight instance
+        flight = Flight(
+            id=flight_id,
+            created_at=created_at,
+            deleted_at=deleted_at,
+            flight_name=flight_name,
+            origin=origin,
+            destination=destination,
+            cost=cost
         )
 
         try:
-            # Add the passenger to the session and commit
-            db.session.add(passenger)
+            db.session.add(flight)
             db.session.commit()
+            return flight.to_dict(), 201
         except Exception as e:
             db.session.rollback()
             return {'message': f'Error occurred: {str(e)}'}, 500
 
-        return passenger.to_dict(), 201
 
 
 class PassengerResource(Resource):
@@ -183,15 +198,8 @@ class CheapestRouteResource(Resource):
             if not origin or not destination:
                 return {'message': 'Both origin and destination are required.'}, 400
 
-            # Validate UUIDs if origin and destination are expected to be UUIDs
-            try:
-                origin_uuid = str(UUID(origin))
-                destination_uuid = str(UUID(destination))
-            except ValueError:
-                return {'message': 'Invalid origin or destination format. They should be valid UUIDs.'}, 400
-
             # Call the find_cheapest_route static method
-            route, total_cost = Flight.find_cheapest_route(origin_uuid, destination_uuid)
+            route, total_cost = Flight.find_cheapest_route(origin, destination)
 
             if route is None:
                 return {'message': 'No route found between the specified points.'}, 404
@@ -200,15 +208,11 @@ class CheapestRouteResource(Resource):
             route_info = [flight.to_dict() for flight in route]
             return {'route': route_info, 'total_cost': total_cost}, 200
 
-        except ValueError as val_err:
-            # Catch errors related to value issues (e.g., UUID parsing)
-            return {'message': f'Value error: {str(val_err)}'}, 400
-
         except Exception as e:
-            # Catch any other unexpected errors
+            # Catch any unexpected errors
             return {'message': f'An unexpected error occurred: {str(e)}'}, 500
 
-        
+
 
 
 
