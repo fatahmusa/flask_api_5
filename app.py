@@ -30,14 +30,17 @@ def internal_error(error):
 class FlightResource(Resource):
     @cache.cached(timeout=120)
     def get(self, flight_id=None):
-        if flight_id:
-            flight = Flight.query.get(str(flight_id))
-            if not flight:
-                return {'message': 'Flight not found'}, 404
-            return flight.to_dict(), 200
-        else:
-            flights = Flight.query.all()
-            return [flight.to_dict() for flight in flights], 200
+        try:
+            if flight_id:
+                flight = Flight.query.get(str(flight_id))
+                if not flight:
+                    return {'message': 'Flight not found'}, 404
+                return flight.to_dict(), 200
+            else:
+                flights = Flight.query.all()
+                return [flight.to_dict() for flight in flights], 200
+        except Exception as e:
+            return {'message': f'An error occurred while fetching flights: {str(e)}'}, 500
 
 
     def post(self):
@@ -101,49 +104,112 @@ class PassengerResource(Resource):
         return passenger.to_dict(), 201
 
     def get(self, passenger_id=None):
-        if passenger_id:
+        try:
+            if passenger_id:
+                passenger = Passenger.query.get(str(passenger_id))
+                if not passenger:
+                    return {'message': 'Passenger not found'}, 404
+                return passenger.to_dict(), 200
+            else:
+                passengers = Passenger.query.filter(Passenger.deleted_at.is_(None)).all()
+                return [passenger.to_dict() for passenger in passengers], 200
+        except Exception as e:
+            return {'message': f'An error occurred while fetching passengers: {str(e)}'}, 500
+
+
+
+    def put(self, passenger_id):
+        try:
             passenger = Passenger.query.get(str(passenger_id))
             if not passenger:
                 return {'message': 'Passenger not found'}, 404
+            data = request.get_json()
+            passenger.name = data.get('name', passenger.name)
+            passenger.email = data.get('email', passenger.email)
+            passenger.checked_in = data.get('checked_in', passenger.checked_in)
+            db.session.commit()
             return passenger.to_dict(), 200
-        else:
-            passengers = Passenger.query.filter(Passenger.deleted_at.is_(None)).all()
-            return [passenger.to_dict() for passenger in passengers], 200
+        except Exception as e:
+            db.session.rollback()
+            return {'message': f'An error occurred while updating the passenger: {str(e)}'}, 500
 
-    def put(self, passenger_id):
-        passenger = Passenger.query.get(str(passenger_id))
-        if not passenger:
-            return {'message': 'Passenger not found'}, 404
-        data = request.get_json()
-        passenger.name = data.get('name', passenger.name)
-        passenger.email = data.get('email', passenger.email)
-        passenger.checked_in = data.get('checked_in', passenger.checked_in)
-        db.session.commit()
-        return passenger.to_dict(), 200
+
 
 
 class PassengerSoftDeleteResource(Resource):
     
     def delete(self, passenger_id):
-        passenger = Passenger.query.get(str(passenger_id))
-        if not passenger:
-            return {'message': 'Passenger not found'}, 404
-        
-        passenger.soft_delete()
-        return {'message': 'Passenger soft deleted'}, 200
+        try:
+            passenger = Passenger.query.get(str(passenger_id))
+            if not passenger:
+                return {'message': 'Passenger not found'}, 404
+            
+            passenger.soft_delete()
+            db.session.commit()
+            return {'message': 'Passenger soft deleted'}, 200
+
+        except Exception as e:
+            db.session.rollback()
+            return {'message': f'An error occurred while soft deleting the passenger: {str(e)}'}, 500
 
 
 class PassengerRestoreResource(Resource):
     def patch(self, passenger_id):
-        passenger = Passenger.query.get(str(passenger_id))
-        if not passenger:
-            return {'message': 'Passenger not found'}, 404
+        try:
+            passenger = Passenger.query.get(str(passenger_id))
+            if not passenger:
+                return {'message': 'Passenger not found'}, 404
+            
+            if passenger.deleted_at is None:
+                return {'message': 'Passenger is not soft deleted'}, 400
+            
+            passenger.restore()
+            db.session.commit()
+            return {'message': 'Passenger restored'}, 200
+
+        except Exception as e:
+            db.session.rollback()
+            return {'message': f'An error occurred while restoring the passenger: {str(e)}'}, 500
         
-        if passenger.deleted_at is None:
-            return {'message': 'Passenger is not soft deleted'}, 400
+
+
+class CheapestRouteResource(Resource):
+    def get(self):
+        try:
+            # Parse request arguments
+            origin = request.args.get('origin')
+            destination = request.args.get('destination')
+
+            if not origin or not destination:
+                return {'message': 'Both origin and destination are required.'}, 400
+
+            # Validate UUIDs if origin and destination are expected to be UUIDs
+            try:
+                origin_uuid = str(UUID(origin))
+                destination_uuid = str(UUID(destination))
+            except ValueError:
+                return {'message': 'Invalid origin or destination format. They should be valid UUIDs.'}, 400
+
+            # Call the find_cheapest_route static method
+            route, total_cost = Flight.find_cheapest_route(origin_uuid, destination_uuid)
+
+            if route is None:
+                return {'message': 'No route found between the specified points.'}, 404
+
+            # Prepare route information for the response
+            route_info = [flight.to_dict() for flight in route]
+            return {'route': route_info, 'total_cost': total_cost}, 200
+
+        except ValueError as val_err:
+            # Catch errors related to value issues (e.g., UUID parsing)
+            return {'message': f'Value error: {str(val_err)}'}, 400
+
+        except Exception as e:
+            # Catch any other unexpected errors
+            return {'message': f'An unexpected error occurred: {str(e)}'}, 500
+
         
-        passenger.restore()
-        return {'message': 'Passenger restored'}, 200
+
 
 
 # Add resources to the API
@@ -151,6 +217,8 @@ api.add_resource(FlightResource, '/flights', '/flights/<uuid:flight_id>')
 api.add_resource(PassengerResource, '/passengers', '/passengers/<uuid:passenger_id>')
 api.add_resource(PassengerSoftDeleteResource, '/passengers/<uuid:passenger_id>/soft_delete')
 api.add_resource(PassengerRestoreResource, '/passengers/<uuid:passenger_id>/restore')
+api.add_resource(CheapestRouteResource, '/flights/cheapest_route')
+
 
 # Run the app
 if __name__ == '__main__':
