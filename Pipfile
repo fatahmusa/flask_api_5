@@ -14,6 +14,8 @@ flask-migrate = "*"
 faker = "*"
 pytest = "*"
 flask-testing = "*"
+pytest-cov = "*"
+flask-caching = "*"
 
 [dev-packages]
 

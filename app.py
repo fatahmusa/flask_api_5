@@ -152,7 +152,6 @@ class PassengerResource(Resource):
 
 
 class PassengerSoftDeleteResource(Resource):
-    
     def delete(self, passenger_id):
         try:
             passenger = Passenger.query.get(str(passenger_id))
@@ -211,9 +210,6 @@ class CheapestRouteResource(Resource):
         except Exception as e:
             # Catch any unexpected errors
             return {'message': f'An unexpected error occurred: {str(e)}'}, 500
-
-
-
 
 
 # Add resources to the API
