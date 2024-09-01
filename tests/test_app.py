@@ -141,7 +141,7 @@ def test_soft_delete_passenger(client):
     data = response.get_json()
     assert data['message'] == 'Passenger soft deleted'
 
-    passenger = Passenger.query.get(passenger_id)
+    passenger = db.session.get(Passenger, passenger.id)
     assert passenger.deleted_at is not None
 
 def test_find_cheapest_route(client):

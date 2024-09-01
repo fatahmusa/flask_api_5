@@ -7,6 +7,12 @@ from uuid import UUID
 from models import db, Flight, Passenger
 from datetime import datetime
 
+
+# Importing db and models
+from models import db, Flight, Passenger
+
+
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///flight.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -44,6 +50,51 @@ class FlightResource(Resource):
                 return [flight.to_dict() for flight in flights], 200
         except Exception as e:
             return {'message': f'An error occurred while fetching flights: {str(e)}'}, 500
+
+    def post(self):
+        data = request.get_json()
+        flight_id = data.get('id')
+        flight_name = data.get('flight_name')
+        origin = data.get('origin')
+        destination = data.get('destination')
+        cost = data.get('cost')
+        created_at = data.get('created_at')
+        deleted_at = data.get('deleted_at')
+
+        if not all([flight_id, flight_name, origin, destination, cost is not None]):
+            return {'message': 'All fields (id, flight_name, origin, destination, cost) are required.'}, 400
+
+        try:
+            flight_id = str(UUID(flight_id))  # Validate flight_id format
+        except ValueError:
+            return {'message': 'Invalid flight ID format'}, 400
+
+        try:
+            if created_at:
+                created_at = datetime.fromisoformat(created_at)
+            if deleted_at:
+                deleted_at = datetime.fromisoformat(deleted_at)
+        except ValueError:
+            return {'message': 'Invalid datetime format. Use ISO 8601 format.'}, 400
+
+        flight = Flight(
+            id=flight_id,
+            created_at=created_at,
+            deleted_at=deleted_at,
+            flight_name=flight_name,
+            origin=origin,
+            destination=destination,
+            cost=cost
+        )
+
+        try:
+            db.session.add(flight)
+            db.session.commit()
+            return flight.to_dict(), 201
+        except Exception as e:
+            db.session.rollback()
+            return {'message': f'Error occurred: {str(e)}'}, 500
+
 
 
     def post(self):
@@ -99,6 +150,20 @@ class FlightResource(Resource):
 
 class PassengerResource(Resource):
     @cache.cached(timeout=120, query_string=True)
+    def get(self, passenger_id=None):
+        try:
+            if passenger_id:
+                passenger = db.session.get(Passenger, str(passenger_id))
+                if not passenger:
+                    return {'message': 'Passenger not found'}, 404
+                return passenger.to_dict(), 200
+            else:
+                passengers = Passenger.query.filter(Passenger.deleted_at.is_(None)).all()
+                return [passenger.to_dict() for passenger in passengers], 200
+        except Exception as e:
+            return {'message': f'An error occurred while fetching passengers: {str(e)}'}, 500
+
+
     def post(self):
         data = request.get_json()
         flight_id = data.get('flight_id')
@@ -119,20 +184,6 @@ class PassengerResource(Resource):
         db.session.add(passenger)
         db.session.commit()
         return passenger.to_dict(), 201
-
-    def get(self, passenger_id=None):
-        try:
-            if passenger_id:
-                passenger = db.session.get(Passenger, str(passenger_id))
-                if not passenger:
-                    return {'message': 'Passenger not found'}, 404
-                return passenger.to_dict(), 200
-            else:
-                passengers = Passenger.query.filter(Passenger.deleted_at.is_(None)).all()
-                return [passenger.to_dict() for passenger in passengers], 200
-        except Exception as e:
-            return {'message': f'An error occurred while fetching passengers: {str(e)}'}, 500
-
 
 
     def put(self, passenger_id):

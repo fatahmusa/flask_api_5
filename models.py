@@ -110,7 +110,7 @@ class Flight(BaseModel, db.Model ):
         while step != start:
             flight_id = flight_route.get(step)
             if flight_id:
-                flight = Flight.query.get(flight_id)
+                flight = db.session.get(Flight, flight_id)
                 route.insert(0, flight)# adds the flight to the beginning of the route list in reverse order
                 step = previous_flight[step]
             else:
