@@ -3,7 +3,7 @@ from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_caching import Cache
-from uuid import UUID
+from uuid import uuid4, UUID
 from models import db, Flight, Passenger
 from datetime import datetime
 
@@ -53,6 +53,8 @@ class FlightResource(Resource):
 
     def post(self):
         data = request.get_json()
+
+        # Retrieve all fields from the request data
         flight_id = data.get('id')
         flight_name = data.get('flight_name')
         origin = data.get('origin')
@@ -61,65 +63,22 @@ class FlightResource(Resource):
         created_at = data.get('created_at')
         deleted_at = data.get('deleted_at')
 
-        if not all([flight_id, flight_name, origin, destination, cost is not None]):
-            return {'message': 'All fields (id, flight_name, origin, destination, cost) are required.'}, 400
+        # Generate a new UUID if 'id' is not provided
+        if not flight_id:
+            flight_id = str(uuid4())
 
+        # Validate the provided 'id'
         try:
             flight_id = str(UUID(flight_id))  # Validate flight_id format
         except ValueError:
             return {'message': 'Invalid flight ID format'}, 400
-
-        try:
-            if created_at:
-                created_at = datetime.fromisoformat(created_at)
-            if deleted_at:
-                deleted_at = datetime.fromisoformat(deleted_at)
-        except ValueError:
-            return {'message': 'Invalid datetime format. Use ISO 8601 format.'}, 400
-
-        flight = Flight(
-            id=flight_id,
-            created_at=created_at,
-            deleted_at=deleted_at,
-            flight_name=flight_name,
-            origin=origin,
-            destination=destination,
-            cost=cost
-        )
-
-        try:
-            db.session.add(flight)
-            db.session.commit()
-            return flight.to_dict(), 201
-        except Exception as e:
-            db.session.rollback()
-            return {'message': f'Error occurred: {str(e)}'}, 500
-
-
-
-    def post(self):
-        data = request.get_json()
-
-        # Retrieve all required fields from the request data
-        flight_id = data.get('id')
-        flight_name = data.get('flight_name')
-        origin = data.get('origin')
-        destination = data.get('destination')
-        cost = data.get('cost')
-        created_at = data.get('created_at')
-        deleted_at = data.get('deleted_at')
 
         # Check if all required fields are present
-        if not flight_id or not flight_name or not origin or not destination or cost is None:
-            return {'message': 'All fields (id, flight_name, origin, destination, cost) are required.'}, 400
+        if not flight_name or not origin or not destination or cost is None:
+            return {'message': 'All fields (flight_name, origin, destination, cost) are required.'}, 400
 
+        # Convert 'created_at' and 'deleted_at' to datetime objects if provided
         try:
-            flight_id = str(UUID(flight_id))  # Validate flight_id format
-        except ValueError:
-            return {'message': 'Invalid flight ID format'}, 400
-
-        try:
-            # Convert created_at and deleted_at to datetime objects if provided
             if created_at:
                 created_at = datetime.fromisoformat(created_at)
             if deleted_at:

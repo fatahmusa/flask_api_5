@@ -18,7 +18,14 @@ def client(setup_db):
     with app.test_client() as client:
         yield client
 
-def test_get_all_flights(client):
+@pytest.fixture(scope='function')
+def clear_flights_db():
+    # Clear flights table
+    Flight.query.delete()
+    db.session.commit()
+
+
+def test_get_all_flights(client, clear_flights_db):
     """Test retrieving all flights when there are no flights in the database."""
     response = client.get('/flights')
     assert response.status_code == 200
