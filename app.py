@@ -11,7 +11,9 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///flight.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'simple'  # Set up caching
-cache = Cache(app)
+cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})  # Using the full path to backend classes directly
+cache.init_app(app)
+
 
 db.init_app(app)
 api = Api(app)
@@ -33,7 +35,7 @@ class FlightResource(Resource):
     def get(self, flight_id=None):
         try:
             if flight_id:
-                flight = Flight.query.get(str(flight_id))
+                flight = db.session.get(Flight, str(flight_id))
                 if not flight:
                     return {'message': 'Flight not found'}, 404
                 return flight.to_dict(), 200
@@ -121,7 +123,7 @@ class PassengerResource(Resource):
     def get(self, passenger_id=None):
         try:
             if passenger_id:
-                passenger = Passenger.query.get(str(passenger_id))
+                passenger = db.session.get(Passenger, str(passenger_id))
                 if not passenger:
                     return {'message': 'Passenger not found'}, 404
                 return passenger.to_dict(), 200
@@ -135,7 +137,7 @@ class PassengerResource(Resource):
 
     def put(self, passenger_id):
         try:
-            passenger = Passenger.query.get(str(passenger_id))
+            passenger = db.session.get(Passenger, str(passenger_id))
             if not passenger:
                 return {'message': 'Passenger not found'}, 404
             data = request.get_json()
@@ -154,7 +156,7 @@ class PassengerResource(Resource):
 class PassengerSoftDeleteResource(Resource):
     def delete(self, passenger_id):
         try:
-            passenger = Passenger.query.get(str(passenger_id))
+            passenger = db.session.get(Passenger, str(passenger_id))
             if not passenger:
                 return {'message': 'Passenger not found'}, 404
             
@@ -170,7 +172,7 @@ class PassengerSoftDeleteResource(Resource):
 class PassengerRestoreResource(Resource):
     def patch(self, passenger_id):
         try:
-            passenger = Passenger.query.get(str(passenger_id))
+            passenger = db.session.get(Passenger, str(passenger_id))
             if not passenger:
                 return {'message': 'Passenger not found'}, 404
             
